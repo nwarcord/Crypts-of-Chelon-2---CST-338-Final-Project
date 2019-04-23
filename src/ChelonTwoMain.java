@@ -3,6 +3,8 @@ import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 import java.nio.Buffer;
+import java.util.HashMap;
+import java.util.Map;
 import javax.imageio.ImageIO;
 import javax.swing.*;
 
@@ -15,13 +17,15 @@ public class ChelonTwoMain {
         // Magic happens here.
         GameModel gameModel = new GameModel();
         GameView gameView = new GameView(gameModel);
+        gameView.getGameWindow().pack();
         gameView.getGameWindow().setVisible(true);
     }
 
 }
 
 class GameModel {
-
+    // Game logic here
+    private boolean isPlayerTurn;
 }
 
 class GameView {
@@ -33,6 +37,8 @@ class GameView {
         this.gameModel = gameModel;
         gameWindow = new GameWindow();
         gameWindow.add(new TitleScreen());
+
+        SpriteGenerator.loadSprites();
     }
 
     public GameWindow getGameWindow() {
@@ -43,11 +49,13 @@ class GameView {
 
 class GameController {
 
+
+
 }
 
 class EndScreen extends JPanel {
 
-    private Image gameOver;
+    private BufferedImage gameOver;
     private BufferedImage gameWin;
 
     public EndScreen(boolean ending) {
@@ -104,46 +112,82 @@ class GameWindow extends JFrame {
 
 }
 
-class GameCharacter {
+class GameBoard {
+
+    public static int xDimension = 6;
+    public static int yDimension = 6;
+    private int monsters;
+
+    public GameBoard(int monsters) {
+        this.monsters = monsters;
+    }
+
+
+
+}
+
+interface IMovementComponent {
+    int getMoveSpeed();
+    int[] getCoords();
+    boolean move(int x, int y);
+    boolean ableToMove();
+}
+
+interface IVitalityComponent {
+    int getMaxHealth();
+    int getHealth();
+    void takeDamage(int damage);
+    boolean isAlive();
+}
+
+interface ICombatComponent {
+    int getAttackPower();
+    int attack();
+}
+
+abstract class GameCharacter implements IMovementComponent, IVitalityComponent, ICombatComponent {
 
     private int maxHealth;
     private int health;
     private int moveSpeed;
+    protected int moveRemaining;
     private int attackPower;
-    private int xPos;
-    private int yPos;
+    protected int xPos;
+    protected int yPos;
     private boolean alive;
     private BufferedImage sprite;
 
-    public GameCharacter(int health, int moveSpeed, int attackPower,
-                         int xPos, int yPos, int maxHealth, BufferedImage sprite) {
-        this.health = health;
+    public GameCharacter(int maxHealth, int moveSpeed, int attackPower, int xPos, int yPos, BufferedImage sprite) {
+        this.maxHealth = maxHealth;
+        this.health = maxHealth;
         this.moveSpeed = moveSpeed;
+        this.moveRemaining = moveSpeed;
         this.attackPower = attackPower;
         this.xPos = xPos;
         this.yPos = yPos;
-        this.maxHealth = maxHealth;
-        this.sprite = sprite;
         alive = true;
+        this.sprite = sprite;
+        // setSpriteImage();
     }
 
     public GameCharacter(GameCharacter gameCharacter) {
-        this.health = gameCharacter.getMaxHealth();
-        this.maxHealth = gameCharacter.getMaxHealth();
-        this.moveSpeed = getMoveSpeed();
-        this.attackPower = attack();
-        this.xPos = getCoords()[0];
-        this.yPos = getCoords()[1];
-        this.sprite = getSpriteImage();
+        maxHealth = gameCharacter.getMaxHealth();
+        health = gameCharacter.getMaxHealth();
+        moveSpeed = gameCharacter.getMoveSpeed();
+        moveRemaining = gameCharacter.getMoveSpeed();
+        attackPower = gameCharacter.getAttackPower();
+        xPos = gameCharacter.getCoords()[0];
+        yPos = gameCharacter.getCoords()[1];
+        sprite = gameCharacter.getSpriteImage();
         alive = true;
-    }
-
-    public int getHealth() {
-        return health;
     }
 
     public int getMaxHealth() {
         return maxHealth;
+    }
+
+    public int getHealth() {
+        return health;
     }
 
     public int getMoveSpeed() {
@@ -154,27 +198,12 @@ class GameCharacter {
         return new int[] {xPos, yPos};
     }
 
+    public int getAttackPower() {
+        return attackPower;
+    }
+
     public boolean isAlive() {
         return alive;
-    }
-
-    private void setHealth(int difference) {
-        if (difference > 0)
-            health += difference;
-        else
-            health -= difference;
-    }
-
-    public void takeDamage(int damage) {
-        setHealth(damage);
-        if (health <= 0)
-            dead();
-    }
-
-    public void healHealth(int heal) {
-        setHealth(heal);
-        if (health > maxHealth)
-            health = maxHealth;
     }
 
     private void dead() {
@@ -185,69 +214,119 @@ class GameCharacter {
         return sprite;
     }
 
-    public int attack() {
-        return attackPower;
-    }
-
     public JLabel getSprite() {
         return new JLabel(new ImageIcon(sprite));
     }
 
+    public void takeDamage(int damage) {
+        health -= damage;
+        if (health <= 0)
+            dead();
+    }
+
+    public boolean ableToMove() {
+        return moveRemaining > 0;
+    }
+
+    public abstract boolean move(int x, int y);
+
+    public abstract int attack();
+
+    // protected abstract void setSpriteImage();
+
 }
-/*
-class Wight extends GameCharacter {
 
-    BufferedImage sprite;
+class Player extends GameCharacter {
 
-    public Wight() {
-        super(100,2, 5, 0, 2, 100);
+    public Player(int x, int y) {
+        super(100, 3, 10, x, y, SpriteGenerator.spriteList.get("player"));
     }
 
     @Override
-    public JLabel getSprite() {
-        return new JLabel(new ImageIcon(sprite));
+    public boolean move(int x, int y) {
+        if (ableToMove()) {
+            xPos = x;
+            yPos = y;
+            moveRemaining--;
+            return true;
+        }
+        return false;
+    }
+
+    @Override
+    public int attack() {
+        return getAttackPower();
+    }
+
+    /*@Override
+    protected void setSpriteImage() {
+        try {
+            sprite = ImageIO.read(new File("sprites/wight_sprite.png"));
+        }
+        catch(IOException e) {
+            e.printStackTrace();
+        }
+    }*/
+}
+
+class Wight extends GameCharacter {
+
+    public Wight(int x, int y) {
+        super(30, 2, 10, x, y, SpriteGenerator.spriteList.get("wight"));
+    }
+
+    @Override
+    public boolean move(int x, int y) {
+        return false;
+    }
+
+    @Override
+    public int attack() {
+        return 0;
     }
 }
-*/
 
-class CharacterSpawner {
+class Moth extends GameCharacter {
 
-    private GameCharacter player;
-    private BufferedImage playerSprite;
-    private GameCharacter wight;
-    private BufferedImage wightSprite;
-    private GameCharacter moth;
-    private BufferedImage mothSprite;
-
-    public CharacterSpawner() {
-        setWightSprite();
-        player = new GameCharacter(100, 3, 10, 7, 4, 100, playerSprite);
-        wight = new GameCharacter(30, 2, 10, 4, 1, 30, wightSprite);
-        moth = new GameCharacter(10, 5, 5, 2, 1, 10, mothSprite);
+    public Moth(int x, int y) {
+        super(10, 4, 5, x, y, SpriteGenerator.spriteList.get("moth"));
     }
 
-    private void setCharacterSprite() {
-
+    @Override
+    public boolean move(int x, int y) {
+        return false;
     }
 
-    private void setWightSprite() {
-        // Image sprite = new ImageIcon("sprites/wight_sprite.png").getImage();
-        try {
-            wightSprite = ImageIO.read(new File("sprites/wight_sprite.png"));
+    @Override
+    public int attack() {
+        return 0;
+    }
+}
+
+class SpriteGenerator {
+
+    public static Map<String, BufferedImage> spriteList = new HashMap<>();
+    private static String[] spriteLabels = new String[] {
+        "player",
+        "wight",
+        "moth"
+    };
+    private static boolean spritesLoaded = false;
+
+    public static void loadSprites() {
+        if (spritesLoaded)
+            return;
+        for (String label : spriteLabels) {
+            BufferedImage current;
+            try {
+                current = ImageIO.read(new File(label + ".png"));
+                spriteList.put(label, current);
+            }
+            catch (IOException e) {
+                e.printStackTrace();
+            }
         }
-        catch (IOException ignore){}
-    }
-
-    public GameCharacter getPlayer() {
-        return player;
-    }
-
-    public GameCharacter spawnWight() {
-        return new GameCharacter(wight);
-    }
-
-    public GameCharacter spawnMoth() {
-        return new GameCharacter(moth);
+        spritesLoaded = true;
     }
 
 }
