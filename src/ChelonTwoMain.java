@@ -1,4 +1,6 @@
 import java.awt.*;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
@@ -17,7 +19,8 @@ public class ChelonTwoMain {
         // Magic happens here.
         GameModel gameModel = new GameModel();
         GameView gameView = new GameView(gameModel);
-        gameView.getGameWindow().pack();
+        GameController gameController = new GameController(gameView, gameModel);
+        // gameView.getGameWindow().pack();
         gameView.getGameWindow().setVisible(true);
     }
 
@@ -26,30 +29,152 @@ public class ChelonTwoMain {
 class GameModel {
     // Game logic here
     private boolean isPlayerTurn;
+    private boolean gameStarted;
+
+    public GameModel() {
+        gameStarted = false;
+    }
+
+    public void gameHasStarted() {
+        gameStarted = true;
+    }
+
+    public boolean getGameStarted() {
+        return gameStarted;
+    }
 }
 
-class GameView {
+class GameView extends JFrame {
 
+    private static final int tilesPerRow = 8;
     private GameModel gameModel;
     private GameWindow gameWindow;
+    private JButton[][] gameTiles;
 
-    public GameView (GameModel gameModel){
+    public GameView (GameModel gameModel) {
         this.gameModel = gameModel;
         gameWindow = new GameWindow();
-        gameWindow.add(new TitleScreen());
 
         SpriteGenerator.loadSprites();
+
+        gameTiles = new JButton[tilesPerRow][tilesPerRow];
+        setGameTiles();
     }
 
     public GameWindow getGameWindow() {
         return gameWindow;
     }
 
+    private void setGameTiles() {
+        for (int i = 0; i < tilesPerRow; i++) {
+            for (int j = 0; j < tilesPerRow; j++) {
+                gameTiles[i][j] = new JButton();
+                gameTiles[i][j].setOpaque(false);
+                gameTiles[i][j].setBorder(BorderFactory.createEmptyBorder());
+                gameTiles[i][j].setContentAreaFilled(false);
+                gameTiles[i][j].setBorderPainted(false);
+                gameTiles[i][j].setFocusPainted(false);
+            }
+        }
+    }
+
+    public void switchToInstructions(ActionListener actionListener) {
+        gameWindow.remove(gameWindow.getButtonScreen());
+        JButton instructions = gameWindow.setButtonScreen(ImageLoader.imageToAdd(ImageLoader.instructionScreenImage));
+        gameWindow.getButtonScreen().addActionListener(actionListener);
+        gameWindow.add(instructions, BorderLayout.CENTER);
+        gameWindow.revalidate();
+        gameWindow.repaint();
+
+    }
+
+    public void switchToGame() {
+        gameWindow.remove(gameWindow.getButtonScreen());
+        JPanel game = gameWindow.setGameScreen(ImageLoader.getImageAsBuffered(ImageLoader.gameScreenImage));
+        gameWindow.add(game, BorderLayout.CENTER);
+        addGameTilesToGame(gameWindow.getGameScreen());
+        gameWindow.revalidate();
+        gameWindow.repaint();
+    }
+
+    private void addGameTilesToGame (JPanel gameScreen) {
+        for (int i = 0; i < tilesPerRow; i++) {
+            for (int j = 0; j < tilesPerRow; j++) {
+                gameScreen.add(gameTiles[i][j]);
+            }
+        }
+    }
+
+    public void receiveTitleSwitchListener(ActionListener actionListener) {
+        gameWindow.getButtonScreen().addActionListener(actionListener);
+    }
+
+    public void receiveGameTileListener(ActionListener actionListener) {
+        for (int i = 0; i < tilesPerRow; i++) {
+            for (int j = 0; j < tilesPerRow; j++) {
+                gameTiles[i][j].addActionListener(actionListener);
+                gameTiles[i][j].setActionCommand(Integer.toString(i) + Integer.toString(j));
+            }
+        }
+    }
+
+    public void paintPlayer(Player player, int x, int y) {
+        gameTiles[x][y].setIcon(new ImageIcon(ImageLoader.playerSprite));
+    }
+
+    public void removePlayer(int x, int y) {
+        gameTiles[x][y].setIcon(null);
+    }
+
 }
 
 class GameController {
 
+    private GameView gameView;
+    private GameModel gameModel;
+    private int tempX, tempY = 0;
 
+    public GameController(GameView view, GameModel model) {
+        gameView = view;
+        gameModel = model;
+        gameView.receiveTitleSwitchListener(new TitleSwitchListener());
+        gameView.receiveGameTileListener(new GameTileListener());
+    }
+
+    class TitleSwitchListener implements ActionListener {
+
+        @Override
+        public void actionPerformed(ActionEvent e) {
+            gameView.switchToInstructions(new InstructionSwitchListener());
+        }
+    }
+
+    class InstructionSwitchListener implements ActionListener {
+
+        @Override
+        public void actionPerformed(ActionEvent e) {
+            gameView.switchToGame();
+            gameModel.gameHasStarted();
+        }
+    }
+
+    class GameTileListener implements ActionListener {
+
+        @Override
+        public void actionPerformed(ActionEvent e) {
+            // System.out.println(e.getActionCommand());
+            if (tempX != 0) {
+                gameView.removePlayer(tempX, tempY);
+            }
+            String temp = e.getActionCommand();
+            char x = temp.charAt(0);
+            char y = temp.charAt(1);
+            tempX = Character.getNumericValue(x);
+            tempY = Character.getNumericValue(y);
+            Player player = new Player(Character.getNumericValue(x), Character.getNumericValue(y));
+            gameView.paintPlayer(player, Character.getNumericValue(x), Character.getNumericValue(y));
+        }
+    }
 
 }
 
@@ -72,21 +197,10 @@ class EndScreen extends JPanel {
 
 }
 
-class TitleScreen extends JPanel {
-
-    public TitleScreen() {
-
-        initTitleScreen();
-
-    }
-
-    private void initTitleScreen() {
-        setBackground(Color.GRAY);
-    }
-
-}
-
 class GameWindow extends JFrame {
+
+    private JButton buttonScreen;
+    private JPanel gameScreen;
 
     public GameWindow () {
         initGameWindow();
@@ -101,6 +215,11 @@ class GameWindow extends JFrame {
             IllegalAccessException ignore){}
         setLayout(new BorderLayout());
         setSize(ChelonTwoMain.windowSide, ChelonTwoMain.windowSide);
+        setIconImage(new ImageIcon(ImageLoader.frameIconImage).getImage());
+        setTitle("Nocturne of Dusk");
+        buttonScreen = new JButton();
+        buttonScreen = setButtonScreen(ImageLoader.imageToAdd(ImageLoader.titleScreenImage));
+        add(buttonScreen);
         setLocationRelativeTo(null);
         setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
 
@@ -108,6 +227,38 @@ class GameWindow extends JFrame {
 
     public void switchToGrid() {
         setLayout(new GridLayout(8, 8));
+    }
+
+    public JButton setButtonScreen(JLabel image) {
+        buttonScreen = new JButton();
+        buttonScreen.setBorder(BorderFactory.createEmptyBorder());
+        buttonScreen.setOpaque(false);
+        buttonScreen.setContentAreaFilled(false);
+        buttonScreen.setBorderPainted(false);
+        buttonScreen.setFocusPainted(false);
+        buttonScreen.add(image, BorderLayout.CENTER);
+        return buttonScreen;
+    }
+
+    public JButton getButtonScreen() {
+        return buttonScreen;
+    }
+
+    public JPanel setGameScreen(BufferedImage image) {
+        if (image == null)
+            System.out.println("Failed to load Game Screen");
+        gameScreen = new JPanel() {
+            public void paintComponent(Graphics g) {
+                super.paintComponent(g);
+                g.drawImage(image, 0, 0, ChelonTwoMain.windowSide, ChelonTwoMain.windowSide, this);
+            }
+        };
+        gameScreen.setLayout(new GridLayout(8, 8));
+        return gameScreen;
+    }
+
+    public JPanel getGameScreen() {
+        return gameScreen;
     }
 
 }
@@ -210,7 +361,7 @@ abstract class GameCharacter implements IMovementComponent, IVitalityComponent, 
         alive = false;
     }
 
-    private BufferedImage getSpriteImage() {
+    public BufferedImage getSpriteImage() {
         return sprite;
     }
 
@@ -257,16 +408,6 @@ class Player extends GameCharacter {
     public int attack() {
         return getAttackPower();
     }
-
-    /*@Override
-    protected void setSpriteImage() {
-        try {
-            sprite = ImageIO.read(new File("sprites/wight_sprite.png"));
-        }
-        catch(IOException e) {
-            e.printStackTrace();
-        }
-    }*/
 }
 
 class Wight extends GameCharacter {
@@ -317,16 +458,44 @@ class SpriteGenerator {
         if (spritesLoaded)
             return;
         for (String label : spriteLabels) {
-            BufferedImage current;
-            try {
-                current = ImageIO.read(new File(label + ".png"));
-                spriteList.put(label, current);
-            }
-            catch (IOException e) {
-                e.printStackTrace();
-            }
+            ImageLoader.imageToAdd("src/sprites/" + label + ".png");
         }
         spritesLoaded = true;
+    }
+
+}
+
+class ImageLoader {
+
+    private static String screenFile = "src/screen_images/";
+    public static String frameIconImage = screenFile + "frame_icon.png";
+    public static String titleScreenImage = screenFile + "title_screen.png";
+    public static String instructionScreenImage = screenFile + "instructions.png";
+    public static String gameScreenImage = screenFile + "game_screen.png";
+    public static String gameOverScreenImage = "";
+    public static String gameWinScreenImage = "";
+    public static String playerSprite = "src/sprites/player.png";
+
+    public static JLabel imageToAdd(String filepath) {
+        try {
+            BufferedImage image = ImageIO.read(new File(filepath));
+            return new JLabel(new ImageIcon(image));
+        }
+        catch(IOException e) {
+            e.printStackTrace();
+        }
+        return new JLabel();
+    }
+
+    public static BufferedImage getImageAsBuffered(String filepath) {
+        try {
+            BufferedImage image = ImageIO.read(new File(filepath));
+            return image;
+        }
+        catch(IOException e) {
+            e.printStackTrace();
+        }
+        return null;
     }
 
 }
