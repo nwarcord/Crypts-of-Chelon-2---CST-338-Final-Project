@@ -30,6 +30,7 @@ public class ChelonTwoMain {
 
 class GameModel {
 
+    public static final int maxLevel = 3;
     private boolean playerHasAttacked;
     private boolean gameStarted;
     private GameBoard gameBoard;
@@ -63,6 +64,10 @@ class GameModel {
 
     public GameBoard getGameBoard() {
         return gameBoard;
+    }
+
+    public int getCurrentLevel() {
+        return currentLevel;
     }
 
     public void advanceLevel() {
@@ -179,7 +184,7 @@ class GameModel {
         return !player.isAlive();
     }
 
-    public boolean gameWin() {
+    public boolean levelWon() {
         return gameBoard.getNumberOfMonsters() == 0;
     }
 
@@ -358,8 +363,12 @@ class GameController {
             int[] coords = gameModel.getGameBoard().coordsAsInts(e.getActionCommand());
             if (gameModel.checkAttack(coords[0], coords[1], gameModel.getPlayer())) {
                 gameModel.playerAttack(coords[0], coords[1]);
-                if (gameModel.gameWin())
-                    gameView.switchToGameWin(new GameWinListener());
+                if (gameModel.levelWon()) {
+                    if (gameModel.getCurrentLevel() == GameModel.maxLevel)
+                        gameView.switchToGameWin(new GameWinListener());
+                    else
+                        gameModel.advanceLevel();
+                }
             }
             else
                 gameModel.playerMove(coords[0], coords[1]);
