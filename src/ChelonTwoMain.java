@@ -1,10 +1,20 @@
+/*--------------------------/
+ Nathan Warren-Acord
+ CST 338 - Final Project
+
+   --Nocturne of Dusk--
+ -The Crypts of Chelon II-
+
+ A simple rogue-like game
+ written in Java.
+/--------------------------*/
+
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
-import java.nio.Buffer;
 import java.util.*;
 import javax.imageio.ImageIO;
 import javax.swing.*;
@@ -30,7 +40,7 @@ public class ChelonTwoMain {
 
 class GameModel {
 
-    public static final int maxLevel = 3;
+    public static final int maxLevel = 5;
     private boolean playerHasAttacked;
     private boolean gameStarted;
     private GameBoard gameBoard;
@@ -73,6 +83,8 @@ class GameModel {
     public void advanceLevel() {
         currentLevel++;
         gameBoard = new GameBoard(LevelCreator.generateLevel(currentLevel));
+        player.newTurn();
+        playerHasAttacked = false;
     }
 
     public boolean isAdjacentTile(int x, int y, GameCharacter character) {
@@ -115,7 +127,7 @@ class GameModel {
         if (randomX == 0 || randomX == 7)
             randomX = x;
         if (randomY == 0 || randomY == 7)
-            randomY += (y - 1);
+            randomY = y;
         return new int[] {randomX, randomY};
     }
 
