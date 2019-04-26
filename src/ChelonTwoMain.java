@@ -16,7 +16,9 @@ import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 import java.util.*;
+import java.util.stream.Stream;
 import javax.imageio.ImageIO;
+import javax.sound.sampled.*;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 
@@ -87,7 +89,7 @@ class GameModel {
         playerHasAttacked = false;
     }
 
-    public boolean isAdjacentTile(int x, int y, GameCharacter character) {
+    private boolean isAdjacentTile(int x, int y, GameCharacter character) {
         int xDifference = Math.abs(x - character.getCoords()[0]);
         int yDifference = Math.abs(y - character.getCoords()[1]);
         return (xDifference < 2 && yDifference < 2 && (xDifference + yDifference) != 0);
@@ -101,6 +103,7 @@ class GameModel {
         for (GameCharacter monster : gameBoard.getBoard().values()) {
             if (isAdjacentTile(player.getCoords()[0], player.getCoords()[1], monster)) {
                 player.takeDamage(monster.attack());
+                SoundSystem.getPlayerHit().start();
                 if (!(player.isAlive()))
                     gameOver();
             }
@@ -151,6 +154,7 @@ class GameModel {
         if (playerHasAttacked)
             return;
         gameBoard.getCharacterAtCoords(x, y).takeDamage(player.attack());
+        SoundSystem.getEnemyHit().start();
         if (!(gameBoard.getCharacterAtCoords(x, y).isAlive())) {
             gameBoard.removeMonster(x, y);
             gameBoard.resetBoard();
@@ -340,12 +344,15 @@ class GameController {
 
     private GameView gameView;
     private GameModel gameModel;
+    private Clip currentTheme;
 
     public GameController(GameView view, GameModel model) {
         gameView = view;
         gameModel = model;
         gameView.receiveTitleSwitchListener(new TitleSwitchListener());
         gameView.receiveGameTileListener(new GameTileListener());
+        currentTheme = SoundSystem.getIntro();
+        currentTheme.start();
     }
 
     class TitleSwitchListener implements ActionListener {
@@ -365,6 +372,9 @@ class GameController {
             gameView.drawMonsters(gameModel.getMonsters());
             gameView.drawPlayer(gameModel.getPlayer());
             gameView.updatePlayerHealth();
+            currentTheme.stop();
+            currentTheme = SoundSystem.getGameTheme();
+            currentTheme.loop(Clip.LOOP_CONTINUOUSLY);
         }
     }
 
@@ -375,9 +385,14 @@ class GameController {
             int[] coords = gameModel.getGameBoard().coordsAsInts(e.getActionCommand());
             if (gameModel.checkAttack(coords[0], coords[1], gameModel.getPlayer())) {
                 gameModel.playerAttack(coords[0], coords[1]);
+                // SoundSystem.getEnemyHit().start();
                 if (gameModel.levelWon()) {
-                    if (gameModel.getCurrentLevel() == GameModel.maxLevel)
+                    if (gameModel.getCurrentLevel() == GameModel.maxLevel) {
                         gameView.switchToGameWin(new GameWinListener());
+                        currentTheme.stop();
+                        currentTheme = SoundSystem.getGameWin();
+                        currentTheme.loop(Clip.LOOP_CONTINUOUSLY);
+                    }
                     else
                         gameModel.advanceLevel();
                 }
@@ -389,8 +404,11 @@ class GameController {
 
             if (gameModel.playerTurnOver()) {
                 gameModel.monsterTurn();
-                if (gameModel.gameOver())
+                if (gameModel.gameOver()) {
                     gameView.switchToGameOver(new GameOverListener());
+                    currentTheme.stop();
+                    SoundSystem.getNecroLaugh().start();
+                }
                 gameView.updatePlayerHealth();
                 gameModel.resetPlayerTurn();
                 gameView.updateBoard();
@@ -833,6 +851,67 @@ class ImageLoader {
             e.printStackTrace();
         }
         return null;
+    }
+
+}
+
+class SoundSystem {
+
+    private static String soundFile = "src/sounds/";
+    private static File playerHitFile = new File(soundFile + "player_hit.wav");
+    private static File enemyHitFile = new File(soundFile + "enemy_hit.wav");
+    private static File necroLaughFile = new File(soundFile + "necro_laugh.wav");
+    private static File introFile = new File(soundFile + "intro.wav");
+    private static File gameThemeFile = new File(soundFile + "game_theme.wav");
+    private static File gameWinFile = new File(soundFile + "game_win.wav");
+    private static Clip playerHit, enemyHit, necroLaugh, intro, gameTheme, gameWin;
+
+    public static Clip getPlayerHit() {
+        return makeSoundEffect(playerHitFile, playerHit);
+    }
+
+    public static Clip getEnemyHit() {
+        return makeSoundEffect(enemyHitFile, enemyHit);
+    }
+
+    public static Clip getNecroLaugh() {
+        return makeClip(necroLaughFile, necroLaugh);
+    }
+
+    public static Clip getIntro() {
+        return makeClip(introFile, intro);
+    }
+
+    public static Clip getGameTheme() {
+        return makeClip(gameThemeFile, gameTheme);
+    }
+
+    public static Clip getGameWin() {
+        return makeClip(gameWinFile, gameWin);
+    }
+
+    private static Clip makeClip(File audioFile, Clip clip) {
+        try {
+            AudioInputStream input = AudioSystem.getAudioInputStream(audioFile);
+            clip = AudioSystem.getClip();
+            clip.open(input);
+        }
+        catch (UnsupportedAudioFileException | IOException | LineUnavailableException e) {
+            e.printStackTrace();
+        }
+        return clip;
+    }
+
+    private static Clip makeSoundEffect(File audioFile, Clip clip) {
+        try {
+            AudioInputStream effectInput = AudioSystem.getAudioInputStream(audioFile);
+            clip = AudioSystem.getClip();
+            clip.open(effectInput);
+        }
+        catch (UnsupportedAudioFileException | IOException | LineUnavailableException e) {
+            e.printStackTrace();
+        }
+        return clip;
     }
 
 }
