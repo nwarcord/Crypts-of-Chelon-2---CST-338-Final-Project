@@ -16,12 +16,16 @@ import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 import java.util.*;
-import java.util.stream.Stream;
 import javax.imageio.ImageIO;
 import javax.sound.sampled.*;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 
+/**
+ * Main class. Instantiates the Model, View, and Controller
+ * classes. Loads the sprite images for game characters.
+ * Global variable for window size.
+ */
 public class ChelonTwoMain {
 
     public static final int windowSide = 1280;
@@ -30,46 +34,44 @@ public class ChelonTwoMain {
 
         SpriteGenerator.loadSprites();
 
-        // Magic happens here.
         GameModel gameModel = new GameModel();
         GameView gameView = new GameView(gameModel);
         GameController gameController = new GameController(gameView, gameModel);
-        // gameView.getGameWindow().pack();
         gameView.getGameWindow().setVisible(true);
     }
 
 }
 
+/**
+ * Model class that performs the game logic and holds
+ * the current state of the game.
+ * Initializes the level creator and holds an instance to
+ * the game board.
+ */
 class GameModel {
 
-    public static final int maxLevel = 5;
+    // maxLevel is number of levels generated until game is won.
+    public static final int maxLevel = 6;
     private boolean playerHasAttacked;
-    private boolean gameStarted;
     private GameBoard gameBoard;
     private int currentLevel;
     private Player player;
 
+    /**
+     * Default constructor
+     */
     public GameModel() {
-        // isPlayerTurn = true;
         playerHasAttacked = false;
-        gameStarted = false;
         currentLevel = 1;
         gameBoard = new GameBoard(LevelCreator.generateLevel(currentLevel));
         player = new Player();
-    }
-
-    public void gameHasStarted() {
-        gameStarted = true;
-    }
-
-    public boolean getGameStarted() {
-        return gameStarted;
     }
 
     public Player getPlayer() {
         return player;
     }
 
+    // Returns current monsters on the board as an array.
     public ArrayList<GameCharacter> getMonsters() {
         return new ArrayList<>(gameBoard.getBoard().values());
     }
@@ -82,6 +84,8 @@ class GameModel {
         return currentLevel;
     }
 
+    // Advances the level by generating a new one.
+    // Game board is reset and player turn is refreshed.
     public void advanceLevel() {
         currentLevel++;
         gameBoard = new GameBoard(LevelCreator.generateLevel(currentLevel));
@@ -89,29 +93,42 @@ class GameModel {
         playerHasAttacked = false;
     }
 
+    // Determines if the character is adjacent to the tile at the
+    // given coordinates.
     private boolean isAdjacentTile(int x, int y, GameCharacter character) {
         int xDifference = Math.abs(x - character.getCoords()[0]);
         int yDifference = Math.abs(y - character.getCoords()[1]);
         return (xDifference < 2 && yDifference < 2 && (xDifference + yDifference) != 0);
     }
 
+    // Checks if there is an entity in an adjacent tile to attack
     public boolean checkAttack(int x, int y, GameCharacter character) {
         return (isAdjacentTile(x, y, character) && gameBoard.isOccupied(x, y));
     }
 
+    /*
+     Advances the actions of each monster on the board.
+     Attacking is tried first, then each will try to move closer
+     to the player. If unable to move closer, they will move in a
+     random direction.
+    */
     public void monsterTurn() {
         for (GameCharacter monster : gameBoard.getBoard().values()) {
+            // Attack if player is adjacent.
             if (isAdjacentTile(player.getCoords()[0], player.getCoords()[1], monster)) {
                 player.takeDamage(monster.attack());
                 SoundSystem.getPlayerHit().start();
+                // If attack kills player, end game
                 if (!(player.isAlive()))
                     gameOver();
             }
             else {
                 int[] checkMove = moveCloserToPlayer(monster.getCoords()[0], monster.getCoords()[1]);
+                // Move closer to player if space is unoccupied.
                 if (gameBoard.isOpen(checkMove[0], checkMove[1]))
                     monster.move(checkMove[0], checkMove[1]);
                 else {
+                    // Random move if nothing else.
                     int[] randomMove = generateRandomMove(monster.getCoords()[0], monster.getCoords()[1]);
                     if (gameBoard.isOpen(randomMove[0], randomMove[1]))
                         monster.move(randomMove[0], randomMove[1]);
@@ -122,6 +139,8 @@ class GameModel {
         player.newTurn();
     }
 
+    // Generates random x and y within bounds of game board.
+    // Returned as an array of ints.
     private int[] generateRandomMove(int x, int y) {
         Random random = new Random();
         int randomX = random.nextInt(3);
@@ -129,11 +148,16 @@ class GameModel {
         randomX += (x - 1);
         if (randomX == 0 || randomX == 7)
             randomX = x;
+        randomY += (y - 1);
         if (randomY == 0 || randomY == 7)
             randomY = y;
         return new int[] {randomX, randomY};
     }
 
+
+    // Finds the closest tile to the player.
+    // Bounds checking is not needed since player
+    // cannot move out of bounds.
     private int[] moveCloserToPlayer(int x, int y) {
         int playerX = player.getCoords()[0];
         int playerY = player.getCoords()[1];
@@ -150,6 +174,7 @@ class GameModel {
         return new int[]{closerX, closerY};
     }
 
+    // If player can attack this turn, deal damage.
     public void playerAttack(int x, int y) {
         if (playerHasAttacked)
             return;
@@ -162,6 +187,7 @@ class GameModel {
         playerHasAttacked = true;
     }
 
+    // If within bounds and unoccupied, moves player to tile.
     public void playerMove(int x, int y) {
         if (x == 0 || x == 7 || y == 0 || y == 7)
             return;
@@ -171,15 +197,16 @@ class GameModel {
         }
     }
 
+    // If player has no more actions to take, end turn.
     public boolean playerTurnOver() {
         return (playerHasAttacked || playerAlone()) && !(player.ableToMove());
     }
 
     public void resetPlayerTurn() {
-        // player.newTurn();
         playerHasAttacked = false;
     }
 
+    // Checks if there are any monsters around the player.
     private boolean playerAlone() {
         for (int i = -1; i < 2; i++) {
             for (int j = -1; j < 2; j++) {
@@ -190,6 +217,8 @@ class GameModel {
         return true;
     }
 
+    // Returns true if there is not a monster on the tile
+    // AND if the player is not on the tile.
     public boolean tileEmpty(int x, int y) {
         if (player.getXPos() == x && player.getYPos() == y)
             return false;
@@ -206,6 +235,13 @@ class GameModel {
 
 }
 
+/**
+ * The game view handles the GUI of the game:
+ * Loading screens and updating sprites as
+ * the game progresses.
+ * During the game proper, creates an array of JButtons
+ * that serve as "tiles" where the sprite icons are placed.
+ */
 class GameView extends JFrame {
 
     private static final int tilesPerRow = 8;
@@ -213,6 +249,11 @@ class GameView extends JFrame {
     private GameWindow gameWindow;
     private JButton[][] gameTiles;
 
+    /**
+     * Constructor that initializes a game window object
+     * and the game tiles array.
+     * @param gameModel holds an instance to the model.
+     */
     public GameView (GameModel gameModel) {
         this.gameModel = gameModel;
         gameWindow = new GameWindow();
@@ -225,6 +266,9 @@ class GameView extends JFrame {
         return gameWindow;
     }
 
+    // For each tile in the array, initialize a new
+    // JButton and set its attributes so that it will
+    // be transparent expect for the icon placed on it.
     private void setGameTiles() {
         for (int i = 0; i < tilesPerRow; i++) {
             for (int j = 0; j < tilesPerRow; j++) {
@@ -238,6 +282,8 @@ class GameView extends JFrame {
         }
     }
 
+    // Removes the title screen and adds a the instructions as a new
+    // JButton with a listener.
     public void switchToInstructions(ActionListener actionListener) {
         gameWindow.remove(gameWindow.getButtonScreen());
         JButton instructions = gameWindow.setButtonScreen(ImageLoader.imageToAdd(ImageLoader.instructionScreenImage));
@@ -248,6 +294,8 @@ class GameView extends JFrame {
 
     }
 
+    // Removes instructions and adds the game JPanel to the frame.
+    // Adds the game tiles to the JPanel that was just created.
     public void switchToGame() {
         gameWindow.remove(gameWindow.getButtonScreen());
         JPanel game = gameWindow.setGameScreen(ImageLoader.getImageAsBuffered(ImageLoader.gameScreenImage));
@@ -257,6 +305,8 @@ class GameView extends JFrame {
         gameWindow.repaint();
     }
 
+    // Each game tile JButton is added to the JPanel passed
+    // in as a parameter.
     private void addGameTilesToGame (JPanel gameScreen) {
         for (int i = 0; i < tilesPerRow; i++) {
             for (int j = 0; j < tilesPerRow; j++) {
@@ -265,6 +315,7 @@ class GameView extends JFrame {
         }
     }
 
+    // Listener methods
     public void receiveTitleSwitchListener(ActionListener actionListener) {
         gameWindow.getButtonScreen().addActionListener(actionListener);
     }
@@ -278,16 +329,20 @@ class GameView extends JFrame {
         }
     }
 
+    // Adds player sprite icon to JButton
     public void drawPlayer(Player player) {
         gameTiles[player.getXPos()][player.getYPos()].setIcon(player.getSprite());
     }
 
+    // Adds monster sprite icons to JButtons
     public void drawMonsters(ArrayList<GameCharacter> monsters) {
         for (GameCharacter monster : monsters) {
             gameTiles[monster.getCoords()[0]][monster.getCoords()[1]].setIcon(monster.getSprite());
         }
     }
 
+    // Resets game tile icons to null if there is no character there.
+    // Calls the methods to draw player and monsters at their current positions.
     public void updateBoard() {
         for (int i = 1; i < tilesPerRow; i++) {
             for (int j = 1; j < tilesPerRow; j++) {
@@ -300,6 +355,9 @@ class GameView extends JFrame {
         drawMonsters(gameModel.getMonsters());
     }
 
+    // Following methods reset the JFrame and sets up a new screen
+    // depending on game outcome. Screens are JButtons that have
+    // listeners for on-click actions.
     public void switchToGameOver(ActionListener actionListener) {
         gameWindow.getContentPane().removeAll();
         JButton gameOver = gameWindow.setButtonScreen(ImageLoader.imageToAdd(ImageLoader.gameOverScreenImage));
@@ -327,9 +385,15 @@ class GameView extends JFrame {
         gameWindow.repaint();
     }
 
+    // Updates the heart sprites in the top-left corner.
+    // Actually two instances of the same sprite, first half
+    // showing on first tile and second half on the second.
     public void updatePlayerHealth() {
+        // Guard block - player out of health.
         if (gameModel.getPlayer().getHealth() < 1)
             return;
+        // Align the icons. Left-side for the left and vice-versa.
+        // Creates borders so the two halves align to look like a whole.
         gameTiles[0][0].setHorizontalAlignment(JLabel.LEFT);
         gameTiles[0][0].setBorder(new EmptyBorder(0, 11, 75, 17));
         gameTiles[0][1].setHorizontalAlignment(JLabel.RIGHT);
@@ -340,12 +404,24 @@ class GameView extends JFrame {
 
 }
 
+/**
+ * Game controller that acts as an observer between the
+ * view and the model.
+ * Calls methods on each based on the user input and
+ * state of the game.
+ */
 class GameController {
 
     private GameView gameView;
     private GameModel gameModel;
     private Clip currentTheme;
 
+    /**
+     * Constructor gets model and view references, gives view
+     * listeners, and starts the intro theme music.
+     * @param view reference to the game view
+     * @param model reference to the game model
+     */
     public GameController(GameView view, GameModel model) {
         gameView = view;
         gameModel = model;
@@ -355,6 +431,7 @@ class GameController {
         currentTheme.start();
     }
 
+    // Inner class that notifies view to switch from the title screen.
     class TitleSwitchListener implements ActionListener {
 
         @Override
@@ -363,12 +440,13 @@ class GameController {
         }
     }
 
+    // Inner class that notifies view to switch to the game screen.
+    // Tells the view to setup game elements and switches music.
     class InstructionSwitchListener implements ActionListener {
 
         @Override
         public void actionPerformed(ActionEvent e) {
             gameView.switchToGame();
-            gameModel.gameHasStarted();
             gameView.drawMonsters(gameModel.getMonsters());
             gameView.drawPlayer(gameModel.getPlayer());
             gameView.updatePlayerHealth();
@@ -378,14 +456,18 @@ class GameController {
         }
     }
 
+    //Inner class that detects user input during game,
+    // notifies view and model of updates in the game state.
     class GameTileListener implements ActionListener {
 
         @Override
         public void actionPerformed(ActionEvent e) {
+            // Get tile user clicked and see if it was an enemy or open space.
+            // If occupied, attack. Otherwise, move.
             int[] coords = gameModel.getGameBoard().coordsAsInts(e.getActionCommand());
             if (gameModel.checkAttack(coords[0], coords[1], gameModel.getPlayer())) {
                 gameModel.playerAttack(coords[0], coords[1]);
-                // SoundSystem.getEnemyHit().start();
+                // If all monsters defeated, detect if game won or just level.
                 if (gameModel.levelWon()) {
                     if (gameModel.getCurrentLevel() == GameModel.maxLevel) {
                         gameView.switchToGameWin(new GameWinListener());
@@ -402,8 +484,10 @@ class GameController {
 
             gameView.updateBoard();
 
+            // If the player is out of actions, model processes monster turns.
             if (gameModel.playerTurnOver()) {
                 gameModel.monsterTurn();
+                // If player out of health, game over.
                 if (gameModel.gameOver()) {
                     gameView.switchToGameOver(new GameOverListener());
                     currentTheme.stop();
@@ -416,6 +500,7 @@ class GameController {
         }
     }
 
+    // Exit the program when user clicks on game over screen.
     class GameOverListener implements ActionListener {
 
         @Override
@@ -424,6 +509,7 @@ class GameController {
         }
     }
 
+    // Notify the view to update to the game win screen.
     class GameWinListener implements ActionListener {
 
         @Override
@@ -432,6 +518,7 @@ class GameController {
         }
     }
 
+    // Exit the program when user clicks on final game win screen.
     class GameWinTwoListener implements ActionListener {
 
         @Override
@@ -442,17 +529,26 @@ class GameController {
 
 }
 
+/**
+ * Main JFrame that houses the game GUI.
+ * The game view has a reference to it and
+ * uses it to represent the game state.
+ */
 class GameWindow extends JFrame {
 
     private JButton buttonScreen;
     private JPanel gameScreen;
 
+    /**
+     * Default constructor
+     */
     public GameWindow () {
         initGameWindow();
     }
 
+    // Called by the constructor to setup the initial frame state.
     private void initGameWindow () {
-
+        // Change to look and feel of local machine.
         try {UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());}
         catch(UnsupportedLookAndFeelException |
             ClassNotFoundException |
@@ -470,10 +566,7 @@ class GameWindow extends JFrame {
 
     }
 
-    public void switchToGrid() {
-        setLayout(new GridLayout(8, 8));
-    }
-
+    // Creates a JButton that will serve as title and ending screens.
     public JButton setButtonScreen(JLabel image) {
         buttonScreen = new JButton();
         buttonScreen.setBorder(BorderFactory.createEmptyBorder());
@@ -489,6 +582,8 @@ class GameWindow extends JFrame {
         return buttonScreen;
     }
 
+    // Creates a JPanel for the game screen where play takes place.
+    // The game background is painted directly onto the panel.
     public JPanel setGameScreen(BufferedImage image) {
         if (image == null)
             System.out.println("Failed to load Game Screen");
@@ -498,6 +593,7 @@ class GameWindow extends JFrame {
                 g.drawImage(image, 0, 0, ChelonTwoMain.windowSide, ChelonTwoMain.windowSide, this);
             }
         };
+        // Setup layout for the game tiles.
         gameScreen.setLayout(new GridLayout(8, 8));
         return gameScreen;
     }
@@ -508,22 +604,35 @@ class GameWindow extends JFrame {
 
 }
 
+/**
+ * Class that holds the positioning of all
+ * monsters on the game board. Player is not included.
+ */
 class GameBoard {
 
+    // Hash map - Key is the character coordinates as a string,
+    // value is the character itself.
     private Map<String, GameCharacter> characters = new HashMap<>();
     private int numberOfMonsters;
 
+    /**
+     * Constructor that takes an array and calls the fill method.
+     * @param startSpawns an array of starting monsters
+     */
     public GameBoard (ArrayList<GameCharacter> startSpawns) {
         fillCharacters(startSpawns);
         numberOfMonsters = characters.size();
     }
 
+    // Fills a hash map with the characters from the given array.
     private void fillCharacters(ArrayList<GameCharacter> startSpawns) {
         for (GameCharacter character : startSpawns) {
             characters.put(coordsAsString(character.getCoords()), character);
         }
     }
 
+    // Methods that format coordinates between an int array and
+    // and a string with the numbers concatenated.
     public String coordsAsString (int[] coords) {
         if (coords.length != 2)
             throw new ArrayIndexOutOfBoundsException();
@@ -537,6 +646,7 @@ class GameBoard {
             Character.getNumericValue(coords.charAt(1))};
     }
 
+    // Get the character at a given location.
     public GameCharacter getCharacterAtCoords(int x, int y) {
         String coords = coordsAsString(new int[] {x, y});
         return characters.get(coords);
@@ -559,6 +669,8 @@ class GameBoard {
         characters.remove(coordsAsString(new int[]{x, y}));
     }
 
+    // Updates the character keys (coordinates) in the hash map
+    // based on their current coordinates (if they have moved).
     public void resetBoard() {
         Map<String, GameCharacter> updatedBoard = new HashMap<>();
         for (GameCharacter character : characters.values())
@@ -572,6 +684,11 @@ class GameBoard {
 
 }
 
+/**
+ * Class that generates the levels of gameplay.
+ * Spawn points are predetermined and shuffled to allow
+ * for variance in level creation.
+ */
 class LevelCreator {
 
     private static int startingMonsters = 3;
@@ -590,13 +707,17 @@ class LevelCreator {
         add(new int[]{6, 6});
     }};
 
+    // Generates a level based on a given integer value.
     public static ArrayList<GameCharacter> generateLevel(int currentLevel) {
+        // Shuffle spawn locations
         resetSpawnLocations();
+        // Calculates the number of monsters to spawn based on level.
         int numberOfMonsters = startingMonsters + (monsterIncrease * (currentLevel - 1));
         if (numberOfMonsters > maxMonsters)
             numberOfMonsters = maxMonsters;
         ArrayList<GameCharacter> createdLevel = new ArrayList<>();
         Random random = new Random();
+        // Spawns monsters based on stated frequency
         for (int i = 0; i < numberOfMonsters; i++) {
             int randomMonster = random.nextInt(101);
             if (randomMonster <= mothFrequency)
@@ -612,6 +733,10 @@ class LevelCreator {
     }
 }
 
+/**
+ * Component that dictates motion methods
+ * for the object it is attached to.
+ */
 interface IMovementComponent {
     int getMoveSpeed();
     int[] getCoords();
@@ -619,6 +744,9 @@ interface IMovementComponent {
     boolean ableToMove();
 }
 
+/**
+ * Methods for health and taking damage.
+ */
 interface IVitalityComponent {
     int getMaxHealth();
     int getHealth();
@@ -626,11 +754,19 @@ interface IVitalityComponent {
     boolean isAlive();
 }
 
+/**
+ * Combat methods - dealing damage.
+ */
 interface ICombatComponent {
     int getAttackPower();
     int attack();
 }
 
+/**
+ * Abstract class that represents a character in the game world.
+ * Uses the movement, combat, and vitality interfaces to dictate
+ * the functionality a character will have.
+ */
 abstract class GameCharacter implements IMovementComponent, IVitalityComponent, ICombatComponent {
 
     private int maxHealth;
@@ -643,6 +779,15 @@ abstract class GameCharacter implements IMovementComponent, IVitalityComponent, 
     private boolean alive;
     private ImageIcon sprite;
 
+    /**
+     * Main constructor for characters.
+     * @param maxHealth max health of character.
+     * @param moveSpeed amount of spaces of movement per turn.
+     * @param attackPower damage dealt with single attack.
+     * @param xPos x-coordinate.
+     * @param yPos y-coordinate.
+     * @param sprite sprite icon of character.
+     */
     public GameCharacter(int maxHealth, int moveSpeed, int attackPower, int xPos, int yPos, ImageIcon sprite) {
         this.maxHealth = maxHealth;
         this.health = maxHealth;
@@ -655,6 +800,12 @@ abstract class GameCharacter implements IMovementComponent, IVitalityComponent, 
         this.sprite = sprite;
     }
 
+    /**
+     * Copy constructor. Can be used in the future for a generic
+     * character spawn factory object, using the passed in
+     * character as a prototype.
+     * @param gameCharacter character to copy.
+     */
     public GameCharacter(GameCharacter gameCharacter) {
         maxHealth = gameCharacter.getMaxHealth();
         health = gameCharacter.getMaxHealth();
@@ -713,22 +864,38 @@ abstract class GameCharacter implements IMovementComponent, IVitalityComponent, 
         moveRemaining = moveSpeed;
     }
 
+    // Abstract methods that allow for characters
+    // to have unique movement and attack behaviors.
     public abstract void move(int x, int y);
 
     public abstract int attack();
 
 }
 
+/**
+ * Class for player object that is controlled by user.
+ * Simple implementation, allowing for 3 space movement and
+ * dealing damage equal to attack power.
+ */
 class Player extends GameCharacter {
 
+    /**
+     * Constructor that allows for spawning player at given coordinates.
+     * @param x x-coordinate for spawn.
+     * @param y y-coordinate for spawn.
+     */
     public Player(int x, int y) {
         super(10, 3, 1, x, y, SpriteGenerator.getSprite("player"));
     }
 
+    /**
+     * Default constructor
+     */
     public Player() {
         super(10, 3, 1, 3, 5, SpriteGenerator.getSprite("player"));
     }
 
+    // Updates player location and decrements their movement counter.
     @Override
     public void move(int x, int y) {
         if (ableToMove()) {
@@ -752,6 +919,11 @@ class Player extends GameCharacter {
     }
 }
 
+/**
+ * Monster: Wight (Sentient undead being)
+ * Simple implementation with an attack of
+ * TWO damage and THREE health.
+ */
 class Wight extends GameCharacter {
 
     public Wight(int x, int y) {
@@ -770,6 +942,11 @@ class Wight extends GameCharacter {
     }
 }
 
+/**
+ * Monster: Grave Moth (corrupted insects)
+ * Simple implementation with ONE health
+ * and attack power of ONE.
+ */
 class Moth extends GameCharacter {
 
     public Moth(int x, int y) {
@@ -788,6 +965,10 @@ class Moth extends GameCharacter {
     }
 }
 
+/**
+ * Class that loads the sprites from file and houses
+ * them in a hash map for retrieval.
+ */
 class SpriteGenerator {
 
     public static Map<String, ImageIcon> spriteList = new HashMap<>();
@@ -798,6 +979,8 @@ class SpriteGenerator {
     };
     private static boolean spritesLoaded = false;
 
+    // Loads the sprites into hash map if they
+    // haven't been loaded already.
     public static void loadSprites() {
         if (spritesLoaded)
             return;
@@ -814,6 +997,10 @@ class SpriteGenerator {
 
 }
 
+/**
+ * Class that loads and houses the images of the game that
+ * are not character sprites.
+ */
 class ImageLoader {
 
     private static String screenFile = "src/screen_images/";
@@ -828,10 +1015,12 @@ class ImageLoader {
         new ArrayList<>(Arrays.asList(
             "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"));
 
+
     public static ImageIcon getPlayerHeartsIcon(int health) {
         return new ImageIcon(screenFile + heartValues.get(health - 1) + "_hearts.png");
     }
 
+    // Returns the image from file in the form of a JLabel
     public static JLabel imageToAdd(String filepath) {
         try {
             BufferedImage image = ImageIO.read(new File(filepath));
@@ -843,6 +1032,7 @@ class ImageLoader {
         return new JLabel();
     }
 
+    // Returns image as a buffered image
     public static BufferedImage getImageAsBuffered(String filepath) {
         try {
             return ImageIO.read(new File(filepath));
@@ -855,6 +1045,10 @@ class ImageLoader {
 
 }
 
+/**
+ * Class that handles the loading and initialization of
+ * sound clips used in the game.
+ */
 class SoundSystem {
 
     private static String soundFile = "src/sounds/";
@@ -866,6 +1060,7 @@ class SoundSystem {
     private static File gameWinFile = new File(soundFile + "game_win.wav");
     private static Clip playerHit, enemyHit, necroLaugh, intro, gameTheme, gameWin;
 
+    // Methods to return the clips that are generated by the makeClip method.
     public static Clip getPlayerHit() {
         return makeSoundEffect(playerHitFile, playerHit);
     }
@@ -890,6 +1085,8 @@ class SoundSystem {
         return makeClip(gameWinFile, gameWin);
     }
 
+    // Opens an audio input stream, audio input file, and creates the clip
+    // object with the connection to the stream.
     private static Clip makeClip(File audioFile, Clip clip) {
         try {
             AudioInputStream input = AudioSystem.getAudioInputStream(audioFile);
@@ -902,6 +1099,9 @@ class SoundSystem {
         return clip;
     }
 
+    // Same as above, but this method is used for the sound effects.
+    // It uses a different audio stream so that the sound effects can play while the
+    // clip using the separate stream is playing.
     private static Clip makeSoundEffect(File audioFile, Clip clip) {
         try {
             AudioInputStream effectInput = AudioSystem.getAudioInputStream(audioFile);
